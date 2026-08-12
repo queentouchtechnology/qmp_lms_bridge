@@ -1,0 +1,2 @@
+# Depends on frappe, lms, and qtt_platform, all already present on the
+# target bench. No third-party Python packages of its own.

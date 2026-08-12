@@ -1,0 +1,3 @@
+# No data migrations — this app defines no DocTypes of its own, only
+# Custom Field fixtures (applied by `bench migrate` directly from
+# fixtures/custom_field.json) and hook registrations.

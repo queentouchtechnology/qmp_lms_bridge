@@ -1,0 +1,8 @@
+include MANIFEST.in
+include requirements.txt
+include *.json
+recursive-include qmp_lms_bridge *.json
+recursive-include qmp_lms_bridge *.md
+recursive-include qmp_lms_bridge *.py
+recursive-include qmp_lms_bridge *.txt
+recursive-exclude qmp_lms_bridge *.pyc

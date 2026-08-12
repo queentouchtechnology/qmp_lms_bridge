@@ -1,0 +1,142 @@
+[
+ {
+  "doctype": "Custom Field",
+  "dt": "LMS Course",
+  "fieldname": "tenant",
+  "label": "Tenant",
+  "fieldtype": "Link",
+  "options": "QTT Tenant",
+  "insert_after": "title",
+  "in_standard_filter": 1,
+  "in_list_view": 1,
+  "translatable": 0
+ },
+ {
+  "doctype": "Custom Field",
+  "dt": "LMS Batch",
+  "fieldname": "tenant",
+  "label": "Tenant",
+  "fieldtype": "Link",
+  "options": "QTT Tenant",
+  "insert_after": "title",
+  "in_standard_filter": 1,
+  "in_list_view": 1,
+  "translatable": 0
+ },
+ {
+  "doctype": "Custom Field",
+  "dt": "LMS Zoom Settings",
+  "fieldname": "tenant",
+  "label": "Tenant",
+  "fieldtype": "Link",
+  "options": "QTT Tenant",
+  "insert_after": "enabled",
+  "in_standard_filter": 1,
+  "translatable": 0
+ },
+ {
+  "doctype": "Custom Field",
+  "dt": "Course Evaluator",
+  "fieldname": "tenant",
+  "label": "Tenant",
+  "fieldtype": "Link",
+  "options": "QTT Tenant",
+  "insert_after": "evaluator",
+  "in_standard_filter": 1,
+  "translatable": 0
+ },
+ {
+  "doctype": "Custom Field",
+  "dt": "LMS Category",
+  "fieldname": "tenant",
+  "label": "Tenant",
+  "fieldtype": "Link",
+  "options": "QTT Tenant",
+  "insert_after": "category",
+  "in_standard_filter": 1,
+  "translatable": 0
+ },
+ {
+  "doctype": "Custom Field",
+  "dt": "Course Lesson",
+  "fieldname": "tenant",
+  "label": "Tenant",
+  "fieldtype": "Link",
+  "options": "QTT Tenant",
+  "insert_after": "title",
+  "in_standard_filter": 1,
+  "in_list_view": 1,
+  "translatable": 0
+ },
+ {
+  "doctype": "Custom Field",
+  "dt": "LMS Quiz",
+  "fieldname": "tenant",
+  "label": "Tenant",
+  "fieldtype": "Link",
+  "options": "QTT Tenant",
+  "insert_after": "course",
+  "in_standard_filter": 1,
+  "in_list_view": 1,
+  "translatable": 0
+ },
+ {
+  "doctype": "Custom Field",
+  "dt": "LMS Certificate",
+  "fieldname": "tenant",
+  "label": "Tenant",
+  "fieldtype": "Link",
+  "options": "QTT Tenant",
+  "insert_after": "course",
+  "in_standard_filter": 1,
+  "translatable": 0
+ },
+ {
+  "doctype": "Custom Field",
+  "dt": "LMS Enrollment",
+  "fieldname": "tenant",
+  "label": "Tenant",
+  "fieldtype": "Link",
+  "options": "QTT Tenant",
+  "insert_after": "course",
+  "in_standard_filter": 1,
+  "in_list_view": 1,
+  "translatable": 0
+ },
+ {
+  "doctype": "Custom Field",
+  "dt": "LMS Batch Enrollment",
+  "fieldname": "tenant",
+  "label": "Tenant",
+  "fieldtype": "Link",
+  "options": "QTT Tenant",
+  "insert_after": "batch",
+  "in_standard_filter": 1,
+  "in_list_view": 1,
+  "translatable": 0
+ },
+ {
+  "doctype": "Custom Field",
+  "dt": "LMS Live Class",
+  "fieldname": "tenant",
+  "label": "Tenant",
+  "fieldtype": "Link",
+  "options": "QTT Tenant",
+  "insert_after": "title",
+  "in_standard_filter": 1,
+  "in_list_view": 1,
+  "translatable": 0
+ },
+ {
+  "doctype": "Custom Field",
+  "dt": "LMS Assignment",
+  "fieldname": "tenant",
+  "label": "Tenant",
+  "fieldtype": "Link",
+  "options": "QTT Tenant",
+  "insert_after": "title",
+  "in_standard_filter": 1,
+  "in_list_view": 1,
+  "translatable": 0
+ }
+]
