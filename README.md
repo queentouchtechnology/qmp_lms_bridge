@@ -120,6 +120,48 @@ correctly the moment the parent-link registries exist. Only
 since that hook's shape is inherently not genericizable (see the
 hardening review section 2/17 and `permissions.py`'s own docstring).
 
+## Module layout: why `qmp_lms_bridge/qmp_lms_bridge/qmp_lms_bridge/` exists and is empty
+
+After the `required_apps` fix above, installation failed a second time
+with `ModuleNotFoundError: No module named 'qmp_lms_bridge.qmp_lms_bridge'`.
+Traced against the real Frappe 15 source (`version-15` branch) before
+fixing, not guessed:
+
+- `modules.txt` (this app's, one line: `QMP LMS Bridge`) is read by
+  `frappe.get_module_list()` and passed through `frappe.scrub()`
+  (lowercase, spaces → underscores) — `"QMP LMS Bridge"` becomes
+  `"qmp_lms_bridge"`, stored in `frappe.local.app_modules["qmp_lms_bridge"]`.
+- During `install-app`, `frappe/model/sync.py`'s `sync_for()` does, for
+  every scrubbed module name: `frappe.get_module(app_name + "." +
+  module_name)` — i.e. `frappe.get_module("qmp_lms_bridge.qmp_lms_bridge")`.
+  `frappe.get_module()` is a thin wrapper over
+  `importlib.import_module()`.
+- This is standard, unavoidable Frappe app structure, the same shape
+  `bench new-app` generates for every app: `<repo>/<app>/modules.txt`
+  declares a module name, and `<repo>/<app>/<scrubbed_module_name>/`
+  must exist as a real importable package (at minimum an empty
+  `__init__.py`) — Frappe imports it to build the search path for that
+  module's doctypes/pages/reports, even when there are none.
+
+**What was actually wrong**: this app's Phase 10 build originally
+scaffolded a `qmp_lms_bridge/qmp_lms_bridge/doctype/` folder (copying the
+pattern from `qtt_platform`, which does define its own doctypes), then
+that whole folder — including the required `__init__.py` — was deleted
+once it became clear this app defines zero doctypes of its own, since it
+only carries Custom Field fixtures. Deleting the *whole* folder instead
+of just the incorrect `doctype/` subfolder inside it left `modules.txt`
+pointing at a module folder that no longer existed. `python -m py_compile`
+never catches this class of bug — it checks syntax file-by-file and has
+no notion of "this dotted import path must resolve" the way Frappe's
+installer does.
+
+**The fix**: restored `qmp_lms_bridge/qmp_lms_bridge/qmp_lms_bridge/`
+with a single empty `__init__.py` — deliberately empty, since this app
+still defines no doctypes/pages/reports of its own; Frappe's module sync
+(`get_doc_files()`) just finds no `doctype/`/`page/`/`report/`
+subfolders under it and moves on, which is safe and expected for a
+fixtures-and-hooks-only app.
+
 ## Confidence notes — read before deploying
 
 This implementation pass was done from this project's own accumulated
@@ -185,17 +227,26 @@ bench --site app.quizmasterplus.in install-app qmp_lms_bridge
 bench --site app.quizmasterplus.in migrate
 ```
 
-No manual `hooks.py` edits on the server, no `sites/apps.txt` edits
-required — the fix ships in this repository (see "Why `qtt_platform` is
-not in `required_apps`" above) and takes effect the moment you pull it.
+No manual `hooks.py` edits on the server, no `sites/apps.txt` edits, no
+manual folder creation required — both fixes ship in this repository
+(see "Why `qtt_platform` is not in `required_apps`" and "Module layout"
+above) and take effect the moment you pull it.
 
 ## Tests
 
 - `qmp_lms_bridge/tests/test_install.py` — bench-independent, verifies
   `check_dependencies()`'s actual logic by injecting fake `frappe` /
   `qtt_platform` modules; runs with plain Python, no bench needed:
-  `python -m unittest qmp_lms_bridge.tests.test_install -v`. This is the
-  test that was actually run while building the fix above.
+  `python -m unittest qmp_lms_bridge.tests.test_install -v`. Actually run
+  while building that fix.
+- `qmp_lms_bridge/tests/test_module_structure.py` — bench-independent,
+  reproduces Frappe's exact `modules.txt` → `scrub()` →
+  `frappe.get_module(app + "." + module)` sequence (frappe/__init__.py +
+  frappe/model/sync.py, read from source, not guessed) against this
+  repo's real files — fails the same way `install-app` did if the module
+  folder is ever deleted again: `python -m unittest
+  qmp_lms_bridge.tests.test_module_structure -v`. Actually run while
+  building that fix.
 - `qmp_lms_bridge/tests/test_install_integration.py` — a real
   `FrappeTestCase` integration test for a live bench: `bench --site
   <test-site> run-tests --app qmp_lms_bridge --module
