@@ -1,5 +1,6 @@
 [
  {
+  "name": "LMS Course-tenant",
   "doctype": "Custom Field",
   "dt": "LMS Course",
   "fieldname": "tenant",
@@ -12,6 +13,7 @@
   "translatable": 0
  },
  {
+  "name": "LMS Batch-tenant",
   "doctype": "Custom Field",
   "dt": "LMS Batch",
   "fieldname": "tenant",
@@ -24,6 +26,7 @@
   "translatable": 0
  },
  {
+  "name": "LMS Zoom Settings-tenant",
   "doctype": "Custom Field",
   "dt": "LMS Zoom Settings",
   "fieldname": "tenant",
@@ -35,6 +38,7 @@
   "translatable": 0
  },
  {
+  "name": "Course Evaluator-tenant",
   "doctype": "Custom Field",
   "dt": "Course Evaluator",
   "fieldname": "tenant",
@@ -46,6 +50,7 @@
   "translatable": 0
  },
  {
+  "name": "LMS Category-tenant",
   "doctype": "Custom Field",
   "dt": "LMS Category",
   "fieldname": "tenant",
@@ -57,6 +62,7 @@
   "translatable": 0
  },
  {
+  "name": "Course Lesson-tenant",
   "doctype": "Custom Field",
   "dt": "Course Lesson",
   "fieldname": "tenant",
@@ -69,6 +75,7 @@
   "translatable": 0
  },
  {
+  "name": "LMS Quiz-tenant",
   "doctype": "Custom Field",
   "dt": "LMS Quiz",
   "fieldname": "tenant",
@@ -81,6 +88,7 @@
   "translatable": 0
  },
  {
+  "name": "LMS Certificate-tenant",
   "doctype": "Custom Field",
   "dt": "LMS Certificate",
   "fieldname": "tenant",
@@ -92,6 +100,7 @@
   "translatable": 0
  },
  {
+  "name": "LMS Enrollment-tenant",
   "doctype": "Custom Field",
   "dt": "LMS Enrollment",
   "fieldname": "tenant",
@@ -104,6 +113,7 @@
   "translatable": 0
  },
  {
+  "name": "LMS Batch Enrollment-tenant",
   "doctype": "Custom Field",
   "dt": "LMS Batch Enrollment",
   "fieldname": "tenant",
@@ -116,6 +126,7 @@
   "translatable": 0
  },
  {
+  "name": "LMS Live Class-tenant",
   "doctype": "Custom Field",
   "dt": "LMS Live Class",
   "fieldname": "tenant",
@@ -128,6 +139,7 @@
   "translatable": 0
  },
  {
+  "name": "LMS Assignment-tenant",
   "doctype": "Custom Field",
   "dt": "LMS Assignment",
   "fieldname": "tenant",

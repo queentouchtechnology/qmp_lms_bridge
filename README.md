@@ -162,6 +162,52 @@ still defines no doctypes/pages/reports of its own; Frappe's module sync
 subfolders under it and moves on, which is safe and expected for a
 fixtures-and-hooks-only app.
 
+## Fixture naming: why every Custom Field fixture needs an explicit `name`
+
+After the module-layout fix above, installation failed a third time with
+`KeyError: 'name'` while importing `fixtures/custom_field.json`. Traced
+against real Frappe 15 source before fixing, not guessed:
+
+- Fixture sync runs `frappe.utils.fixtures.sync_fixtures()` ->
+  `frappe.core.doctype.data_import.data_import.import_doc()` ->
+  `frappe.modules.import_file.import_file_by_path()`. The very first
+  thing that function does with each record in the JSON list is
+  `frappe.db.get_value(doc["doctype"], doc["name"], "modified")` — a
+  plain dict access, called *before* `frappe.get_doc()` or `.insert()`
+  ever run.
+- A DocType's own `autoname()` (for Custom Field:
+  `self.name = self.dt + "-" + self.fieldname`, in
+  `frappe/custom/doctype/custom_field/custom_field.py`) only fires
+  during `.insert()` — too late to satisfy the line above. Every fixture
+  record must ship an explicit `name` that already matches what that
+  autoname would produce.
+
+**The fix**: every one of the 12 records in `fixtures/custom_field.json`
+now carries `"name": "<dt>-tenant"` (e.g. `"LMS Course-tenant"`,
+`"LMS Batch Enrollment-tenant"`) — Custom Field's real, documented
+autoname convention (`<dt>-<fieldname>`), read from Frappe's own source,
+not invented. All 12 intended doctypes/fields are unchanged; only the
+`name` key was added.
+
+**Idempotency**: `import_doc()` does `if frappe.db.exists(doc.doctype,
+doc.name): delete_old_doc(doc, ...)` before `doc.insert()` — every
+fixture sync deletes and re-creates the row with that exact name. Since
+`<dt>-<fieldname>` never changes for these fields, repeated
+`install-app`/`migrate` runs always target the same 12 rows — safe to
+re-run any number of times.
+
+**On requirement to re-validate the 12 doctypes/`insert_after` positions
+against live LMS metadata**: attempted this — `GET
+/api/resource/DocType/<name>` against `app.quizmasterplus.in` requires an
+authenticated System Manager session (confirmed live: an unauthenticated
+request returns `403 PermissionError`, "Guest does not have doctype
+access"), and no site credentials were available in the session that
+built this fix. The 12 doctype names and `insert_after` values are
+therefore **unchanged from the existing confidence grading already
+documented below** — not newly re-verified. Nothing here should be
+treated as freshly confirmed just because this fix pass touched the
+file; only the `name` keys are new.
+
 ## Confidence notes — read before deploying
 
 This implementation pass was done from this project's own accumulated
@@ -228,9 +274,10 @@ bench --site app.quizmasterplus.in migrate
 ```
 
 No manual `hooks.py` edits on the server, no `sites/apps.txt` edits, no
-manual folder creation required — both fixes ship in this repository
-(see "Why `qtt_platform` is not in `required_apps`" and "Module layout"
-above) and take effect the moment you pull it.
+manual folder creation, no manual `custom_field.json` edits required —
+every fix ships in this repository (see "Why `qtt_platform` is not in
+`required_apps`", "Module layout", and "Fixture naming" above) and takes
+effect the moment you pull it.
 
 ## Tests
 
@@ -247,6 +294,14 @@ above) and take effect the moment you pull it.
   folder is ever deleted again: `python -m unittest
   qmp_lms_bridge.tests.test_module_structure -v`. Actually run while
   building that fix.
+- `qmp_lms_bridge/tests/test_fixtures.py` — bench-independent: a generic
+  guard that every record in every `fixtures/*.json` file has a `name`
+  key (catches the exact `KeyError: 'name'` class of bug for any future
+  fixture, not just this one), plus Custom-Field-specific checks (exactly
+  12 records, one per intended LMS doctype, `name` matches Frappe's real
+  `<dt>-<fieldname>` autoname convention, names unique):
+  `python -m unittest qmp_lms_bridge.tests.test_fixtures -v`. Actually
+  run while building that fix.
 - `qmp_lms_bridge/tests/test_install_integration.py` — a real
   `FrappeTestCase` integration test for a live bench: `bench --site
   <test-site> run-tests --app qmp_lms_bridge --module
