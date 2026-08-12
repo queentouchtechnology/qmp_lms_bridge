@@ -40,6 +40,66 @@ Field mechanism (never edits `lms`'s source).
 | `permission_query_conditions` for the 4 hook-only doctypes (Course Chapter, LMS Batch Timetable, LMS Timetable Legend, Discussion Topic) | `permissions.py` |
 | `has_permission` for those same 4 doctypes | **Not written here** — `qtt_platform.permissions.handlers.has_permission` is fully generic and registered directly; see below |
 | The 3 SaaS plans (Starter/Professional/Enterprise) and their entitlement limits | `plans.py`, called from `after_install`/`after_migrate` right after product registration |
+| Role-based feature enforcement (which QMP_LMS product role may create/edit/delete which doctype) for all 16 registered doctypes | `roles.py`, registered via `hooks.py`'s `doc_events` (`validate` + `on_trash`) |
+
+## SaaS lifecycle Phase G — role-based feature enforcement
+
+`roles.py::_ROLE_MATRIX` maps each of the 16 doctypes this app
+registers to which product role(s) may `write` (create or edit) and
+`delete` it — a deliberate, documented interpretation of "Manager: LMS
+administration / Instructor: teaching+course+batch operations / Staff:
+staff-level operations / Student: learning-only" onto real doctypes,
+since neither LMS nor the SaaS lifecycle brief publishes an
+operation-by-operation table to consult. Full reasoning for every row is
+in `roles.py`'s own module docstring — summary:
+
+| Role | Can write | Can delete |
+|---|---|---|
+| Manager | everything (all 16) | everything (all 16) |
+| Instructor | Course Chapter, Course Lesson, LMS Quiz, LMS Live Class, LMS Assignment, Discussion Topic | nothing |
+| Staff | LMS Enrollment, LMS Batch Enrollment, LMS Certificate, LMS Batch Timetable, LMS Timetable Legend | LMS Enrollment, LMS Batch Enrollment |
+| Student | Discussion Topic only | nothing |
+
+Registered as `validate` (covers both create and edit — this matrix
+makes no create-vs-edit distinction) and `on_trash` `doc_events` for all
+16 doctypes; the 7 that already had a cross-tenant `validate` handler
+(Phase 10) now run BOTH via `doc_events`' list-of-handlers form — Frappe
+calls every handler in the list, so `roles.py`'s check is additive to
+`validators.py`'s existing one, never a replacement.
+
+**This is a SECOND, additional layer on top of LMS's own native
+Frappe-Role DocPerm** (e.g. "Course Creator"), never a replacement — a
+`validate()` hook only runs for a caller LMS's own permission system
+already let through, so this can only narrow access further (reject a
+user who lacks the right QMP_LMS product role even if their global
+Frappe Role would otherwise allow the write), never widen it. No LMS
+source file was touched to add this.
+
+**Mechanism vs. data split**: the actual capability this relies on —
+resolving which tenant a brand-new, not-yet-saved document belongs to
+(needed because `validate()` fires before a new document is committed,
+so the existing `resolve_tenant_for_doc()`'s database-lookup-by-name
+approach doesn't work for it) — is generic and lives in `qtt_platform`
+(`document_security.resolve_tenant_for_new_doc()`, new this phase);
+`require_product_role()` (existing, unmodified) is what actually gates
+the role. Only the role MATRIX itself — which is 100% QMP_LMS business
+policy — lives in this app.
+
+**System Manager bypass**: same precedent already established by
+`qtt_platform.permissions.handlers.guard_tenant_change_before_save` — a
+session holding the System Manager Frappe Role skips this check
+entirely, so trusted administrative operations (bench console, install
+scripts, a future scheduled job) are never blocked by a product-role
+check that assumes an ordinary tenant member is acting.
+
+**Known limitation, stated plainly**: Student self-enrollment (creating
+their own `LMS Enrollment`) is deliberately NOT included in the matrix
+— this project has no freshly-verified evidence this session of exactly
+how LMS's real self-enrollment flow works, and guessing a doctype shape
+for a real access-relevant action was judged worse than leaving it out
+and flagging it. If self-enrollment is a real requirement, confirm the
+actual mechanism against live LMS behavior before adding a Student
+entry for `LMS Enrollment.write`.
 
 ## SaaS lifecycle Phase B — plan catalog
 
@@ -368,3 +428,34 @@ the correct prices; `qtt_platform.entitlement.engine.get_entitlements(<a
 Starter tenant>, "QMP_LMS")["max_students"] == 25`; editing a limit in
 `PLAN_CATALOG` and re-running `bench migrate` updates the existing plan
 row (same `name`) rather than creating a fourth one.
+
+- `qmp_lms_bridge/tests/test_roles.py` — bench-independent (SaaS
+  lifecycle Phase G): pins the entire `_ROLE_MATRIX` against the
+  documented policy (Manager sees every doctype in both write and
+  delete; Instructor/Staff appear in `write` but never `delete` except
+  Staff on the two enrollment doctypes; Student appears only on
+  `Discussion Topic`; all 16 registered doctypes are covered, no more,
+  no less), plus `enforce_role_on_write`/`enforce_role_on_delete`'s own
+  logic (calls `require_product_role` with exactly the matrix's roles
+  for a governed doctype, no-ops for an ungoverned one, the System
+  Manager bypass, raises when tenant can't be resolved rather than
+  failing open): `python -m unittest qmp_lms_bridge.tests.test_roles -v`.
+  Actually run while building Phase G — 15/15 pass. Fakes
+  `qtt_platform.document_security`/`qtt_platform.product.guards`
+  directly (same technique as `test_install.py`'s `qtt_platform.product.
+  registry` fake) rather than importing the real qtt_platform package,
+  since it isn't on this dev environment's Python path outside a real
+  bench.
+
+**On a real bench**, additionally confirm: a user with only QMP_LMS
+`Instructor` product access, attempting to create an `LMS Course`
+directly (e.g. via the Desk, if their Frappe Role happens to also
+include `Course Creator`) → rejected with a `PermissionError` from
+`require_product_role`, even though LMS's own DocPerm would otherwise
+have allowed it; the same Instructor creating a `Course Lesson` within a
+course they have access to → succeeds; a `Student` attempting to create
+a `Discussion Topic` → succeeds; a `Student` attempting to create an
+`LMS Enrollment` (self-enrollment) → rejected, consistent with the
+documented known limitation above (there is no path that currently
+allows it, by design, pending live confirmation of the real
+self-enrollment mechanism).

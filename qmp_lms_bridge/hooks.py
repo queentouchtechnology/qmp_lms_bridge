@@ -124,13 +124,98 @@ permission_query_conditions = {
 # denormalized doctypes that reference another tenant-owned document. See
 # qmp_lms_bridge/validators.py's own confidence note on which field names
 # were freshly verified this project vs. carried forward from earlier work.
+#
+# SaaS lifecycle Phase G adds role-based feature enforcement
+# (qmp_lms_bridge/roles.py: enforce_role_on_write / enforce_role_on_delete)
+# to ALL 16 doctypes this app registers — `validate` fires on both create
+# and edit (a doc_events value may be a single dotted path or a list of
+# them; Frappe calls every handler in the list, which is how the 7
+# doctypes below combine their existing cross-tenant validator with the
+# new role check without either replacing the other), `on_trash` on
+# delete. See roles.py's own module docstring for the full role matrix
+# and the reasoning behind it.
 # --------------------------------------------------------------------------
 doc_events = {
-	"Course Lesson": {"validate": "qmp_lms_bridge.validators.course_lesson_validate"},
-	"LMS Quiz": {"validate": "qmp_lms_bridge.validators.lms_quiz_validate"},
-	"LMS Enrollment": {"validate": "qmp_lms_bridge.validators.lms_enrollment_validate"},
-	"LMS Batch Enrollment": {"validate": "qmp_lms_bridge.validators.lms_batch_enrollment_validate"},
-	"LMS Certificate": {"validate": "qmp_lms_bridge.validators.lms_certificate_validate"},
-	"LMS Live Class": {"validate": "qmp_lms_bridge.validators.lms_live_class_validate"},
-	"LMS Assignment": {"validate": "qmp_lms_bridge.validators.lms_assignment_validate"},
+	"LMS Course": {
+		"validate": "qmp_lms_bridge.roles.enforce_role_on_write",
+		"on_trash": "qmp_lms_bridge.roles.enforce_role_on_delete",
+	},
+	"LMS Batch": {
+		"validate": "qmp_lms_bridge.roles.enforce_role_on_write",
+		"on_trash": "qmp_lms_bridge.roles.enforce_role_on_delete",
+	},
+	"LMS Zoom Settings": {
+		"validate": "qmp_lms_bridge.roles.enforce_role_on_write",
+		"on_trash": "qmp_lms_bridge.roles.enforce_role_on_delete",
+	},
+	"Course Evaluator": {
+		"validate": "qmp_lms_bridge.roles.enforce_role_on_write",
+		"on_trash": "qmp_lms_bridge.roles.enforce_role_on_delete",
+	},
+	"LMS Category": {
+		"validate": "qmp_lms_bridge.roles.enforce_role_on_write",
+		"on_trash": "qmp_lms_bridge.roles.enforce_role_on_delete",
+	},
+	"Course Chapter": {
+		"validate": "qmp_lms_bridge.roles.enforce_role_on_write",
+		"on_trash": "qmp_lms_bridge.roles.enforce_role_on_delete",
+	},
+	"Course Lesson": {
+		"validate": [
+			"qmp_lms_bridge.validators.course_lesson_validate",
+			"qmp_lms_bridge.roles.enforce_role_on_write",
+		],
+		"on_trash": "qmp_lms_bridge.roles.enforce_role_on_delete",
+	},
+	"LMS Quiz": {
+		"validate": ["qmp_lms_bridge.validators.lms_quiz_validate", "qmp_lms_bridge.roles.enforce_role_on_write"],
+		"on_trash": "qmp_lms_bridge.roles.enforce_role_on_delete",
+	},
+	"LMS Enrollment": {
+		"validate": [
+			"qmp_lms_bridge.validators.lms_enrollment_validate",
+			"qmp_lms_bridge.roles.enforce_role_on_write",
+		],
+		"on_trash": "qmp_lms_bridge.roles.enforce_role_on_delete",
+	},
+	"LMS Batch Enrollment": {
+		"validate": [
+			"qmp_lms_bridge.validators.lms_batch_enrollment_validate",
+			"qmp_lms_bridge.roles.enforce_role_on_write",
+		],
+		"on_trash": "qmp_lms_bridge.roles.enforce_role_on_delete",
+	},
+	"LMS Certificate": {
+		"validate": [
+			"qmp_lms_bridge.validators.lms_certificate_validate",
+			"qmp_lms_bridge.roles.enforce_role_on_write",
+		],
+		"on_trash": "qmp_lms_bridge.roles.enforce_role_on_delete",
+	},
+	"LMS Live Class": {
+		"validate": [
+			"qmp_lms_bridge.validators.lms_live_class_validate",
+			"qmp_lms_bridge.roles.enforce_role_on_write",
+		],
+		"on_trash": "qmp_lms_bridge.roles.enforce_role_on_delete",
+	},
+	"LMS Assignment": {
+		"validate": [
+			"qmp_lms_bridge.validators.lms_assignment_validate",
+			"qmp_lms_bridge.roles.enforce_role_on_write",
+		],
+		"on_trash": "qmp_lms_bridge.roles.enforce_role_on_delete",
+	},
+	"LMS Batch Timetable": {
+		"validate": "qmp_lms_bridge.roles.enforce_role_on_write",
+		"on_trash": "qmp_lms_bridge.roles.enforce_role_on_delete",
+	},
+	"LMS Timetable Legend": {
+		"validate": "qmp_lms_bridge.roles.enforce_role_on_write",
+		"on_trash": "qmp_lms_bridge.roles.enforce_role_on_delete",
+	},
+	"Discussion Topic": {
+		"validate": "qmp_lms_bridge.roles.enforce_role_on_write",
+		"on_trash": "qmp_lms_bridge.roles.enforce_role_on_delete",
+	},
 }
