@@ -36,8 +36,15 @@ def _check_dependencies():
 
 def _register_lms_product():
 	from qmp_lms_bridge.install import register_lms_product
+	from qmp_lms_bridge.plans import seed_plans
 
 	register_lms_product()
+	# seed_plans() must run after register_lms_product() — the QTT Plan
+	# rows it creates reference QMP_LMS as their product, which the line
+	# above is what actually creates. See plans.py's own module docstring
+	# for why this lives in after_install/after_migrate rather than a
+	# qtt_platform patch (SaaS lifecycle brief, Phase B).
+	seed_plans()
 
 
 # The real "qtt_platform must already be installed" guard — runs before

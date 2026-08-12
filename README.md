@@ -39,6 +39,50 @@ Field mechanism (never edits `lms`'s source).
 | Cross-tenant reference validation (Quiz→Course/Lesson, Enrollment→Course, ...) | `validators.py`, registered via `hooks.py`'s `doc_events` |
 | `permission_query_conditions` for the 4 hook-only doctypes (Course Chapter, LMS Batch Timetable, LMS Timetable Legend, Discussion Topic) | `permissions.py` |
 | `has_permission` for those same 4 doctypes | **Not written here** — `qtt_platform.permissions.handlers.has_permission` is fully generic and registered directly; see below |
+| The 3 SaaS plans (Starter/Professional/Enterprise) and their entitlement limits | `plans.py`, called from `after_install`/`after_migrate` right after product registration |
+
+## SaaS lifecycle Phase B — plan catalog
+
+`plans.py::seed_plans()` create-or-updates exactly 3 `QTT Plan` rows
+under `QMP_LMS`, each with 6 `QTT Plan Feature` child rows, on every
+`after_install`/`after_migrate` — the same idempotent, re-apply-on-every-
+migrate pattern `install.py::register_lms_product()` already established
+for the product row itself:
+
+| Plan | `plan_code` | Price | `max_students` | `max_batch_students` | `max_instructors` | `max_courses` | `max_batches` | `max_live_classes` |
+|---|---|---|---|---|---|---|---|---|
+| QMP LMS Starter | `STARTER` | ₹99/mo | 25 | 25 | 2 | 5 | 2 | 2 |
+| QMP LMS Professional | `PROFESSIONAL` | ₹299/mo | 100 | 100 | 10 | 25 | 10 | 10 |
+| QMP LMS Enterprise | `ENTERPRISE` | ₹799/mo | 500 | 500 | 50 | 100 | 50 | 50 |
+
+All three: `billing_period=monthly`, `trial_days=7`, `is_public=1`.
+
+**Why this lives here and not as a `qtt_platform` patch**: a Frappe
+patch (`patches/v0_*`) runs at most once per site, tracked in `Patch
+Log`. At the moment `qtt_platform`'s own `migrate` first runs, `QMP_LMS`
+does not exist yet — `qmp_lms_bridge` installs afterward, per its own
+`before_install` dependency check (see below). A patch would check for
+the product, find nothing, no-op, and — because Frappe patches don't
+retry — never run again. `after_install`/`after_migrate` hooks, by
+contrast, run every time, which is what makes them the right place for
+data that must track what's actually deployed. This also matches the
+SaaS lifecycle brief's own architecture rule: the plan catalog and its
+entitlement limits are QMP_LMS business data, not generic platform
+infrastructure, so it belongs in this app, never in `qtt_platform`.
+
+**No hardcoded plan checks anywhere** — `feature_key` values
+(`max_students`, `max_batch_students`, `max_instructors`, `max_courses`,
+`max_batches`, `max_live_classes`) match `usage.py`'s registered usage
+resolvers exactly, so every limit above is enforced through
+`qtt_platform.entitlement.engine.check_limit()` /
+`qtt_platform.api.saas.get_plans()`, the same generic engine every other
+phase already uses — nothing in this file, or anywhere else, branches on
+`if plan_code == "STARTER"`.
+
+Re-running `bench migrate` after editing `PLAN_CATALOG` in `plans.py`
+updates the existing plan rows in place (price/limit changes take
+effect immediately for every tenant reading `get_entitlements()`);
+it never creates a duplicate plan for the same `plan_code`.
 
 ## Why `qtt_platform` is not in `required_apps`
 
@@ -308,3 +352,19 @@ effect the moment you pull it.
   qmp_lms_bridge.tests.test_install_integration`. Not executed during
   development (no bench access) — run it on your own bench to confirm
   end-to-end.
+- `qmp_lms_bridge/tests/test_plans.py` — bench-independent: pins the
+  exact price/limit figures in `PLAN_CATALOG` against the SaaS lifecycle
+  brief (catches a pricing/entitlement typo, not just a code bug), plus
+  `seed_plans()`'s create-vs-update branching (no-op when `QMP_LMS`
+  doesn't exist yet, creates exactly 3 plans with 6 feature rows each
+  when none exist, updates in place rather than duplicating when they
+  already do): `python -m unittest qmp_lms_bridge.tests.test_plans -v`.
+  Actually run while building Phase B — 9/9 pass.
+
+**On a real bench**, additionally confirm: `bench --site <site>
+console` → `frappe.get_all("QTT Plan", filters={"product": "QMP_LMS"},
+fields=["plan_code", "base_price", "trial_days"])` returns all 3 with
+the correct prices; `qtt_platform.entitlement.engine.get_entitlements(<a
+Starter tenant>, "QMP_LMS")["max_students"] == 25`; editing a limit in
+`PLAN_CATALOG` and re-running `bench migrate` updates the existing plan
+row (same `name`) rather than creating a fourth one.
