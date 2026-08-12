@@ -40,6 +40,61 @@ Field mechanism (never edits `lms`'s source).
 | `permission_query_conditions` for the 4 hook-only doctypes (Course Chapter, LMS Batch Timetable, LMS Timetable Legend, Discussion Topic) | `permissions.py` |
 | `has_permission` for those same 4 doctypes | **Not written here** — `qtt_platform.permissions.handlers.has_permission` is fully generic and registered directly; see below |
 
+## Why `qtt_platform` is not in `required_apps`
+
+`hooks.py` lists `required_apps = ["lms"]` only — `qtt_platform` is a real,
+hard dependency (this whole app is meaningless without it) but is
+deliberately **not** declared through `required_apps`. This was a real
+production bug, found and fixed after the first install attempt on a real
+bench, not a theoretical concern:
+
+**What happened**: `bench --site app.quizmasterplus.in install-app
+qmp_lms_bridge` failed with `frappe.exceptions.InvalidRemoteException`,
+even though `qtt_platform` was genuinely already installed on that site.
+
+**Root cause**, traced against the real Frappe 15 installer source
+(`frappe/installer.py`, `version-15` branch) before writing the fix —
+not guessed: `install_app()` computes `frappe.get_installed_apps()` (the
+site's real, DB-tracked install state) but then does **not** use it to
+resolve `required_apps` — instead, for every entry in `required_apps`, it
+calls `parse_app_name(app)`, which checks membership in
+`frappe.get_all_apps()`. That function reads `sites/apps.txt` (bench-wide)
+plus the site's own `apps.txt` — flat files populated by `bench get-app`,
+**not** the database. `qtt_platform` is a private app with no public git
+remote; if it was ever placed into `apps/` without going through `bench
+get-app` (e.g. copied in directly, then `pip install -e`), it's genuinely
+installed on the site but still missing from `sites/apps.txt`. When
+`parse_app_name` can't find it there, it falls through to
+`fetch_details_from_tag()` → `find_org()`, which HEAD-requests
+`https://api.github.com/repos/frappe/qtt_platform` and
+`.../erpnext/qtt_platform` — both 404 (it's published under neither org)
+— and raises `InvalidRemoteException`. This happens **before**
+`qmp_lms_bridge`'s own `before_install` hooks even run, so nothing in this
+app's own code could intercept it while `qtt_platform` stayed in
+`required_apps`. There is no `required_apps` syntax for "this one is
+local-only, never remote-resolve it" — that's a hard constraint of how the
+installer works, not a bug in `qtt_platform` or in this app's earlier
+`hooks.py`.
+
+**The fix**: `qtt_platform` was removed from `required_apps` entirely.
+Instead, `install.py`'s `check_dependencies()` runs as a real
+`before_install` hook and checks `frappe.get_installed_apps()` directly —
+the same DB-backed source `install_app()` itself trusts as ground truth,
+just consulted at the right point in the flow. If `qtt_platform` really
+isn't installed, this raises a clear `frappe.throw()` with the exact
+install command to run first; if it is installed (regardless of whether
+it's ever listed in `sites/apps.txt`), installation proceeds normally.
+`lms` stays in `required_apps` unchanged — it's a real, publicly gettable
+app, so `parse_app_name` resolves it without ever reaching the remote
+fallback.
+
+**Also worth doing, separately, on the bench itself** (optional — not
+required for `qmp_lms_bridge` to install correctly, since the code no
+longer depends on it): add `qtt_platform` as a line in the bench-wide
+`sites/apps.txt` so other bench tooling that does consult that file
+(`bench get-app`, `bench build --app qtt_platform`, etc.) recognizes it
+too. That's bench/environment hygiene, not part of this app's fix.
+
 ## The parent-walk extension this phase made to `qtt_platform` itself
 
 Phase 3 of `qtt_platform` deliberately left `resolve_tenant_for_doc()`
@@ -109,9 +164,41 @@ bench --site app.quizmasterplus.in install-app qmp_lms_bridge
 bench --site app.quizmasterplus.in migrate
 ```
 
-`install-app` triggers `after_install` (registers the product). `migrate`
-syncs the Custom Field fixtures and re-runs registration (idempotent).
-Confirm all 12 Custom Fields exist and `QTT Product/QMP_LMS` resolves
-before treating this as live — and re-run the full `qtt_platform`
-security test suite (see its own README) against real two-tenant LMS
-data before this governs production access.
+`install-app` first runs `before_install` (`check_dependencies()` —
+confirms `qtt_platform` is really installed on this site, and fails with
+a clear message and the exact fix command if it isn't), then triggers
+`after_install` (registers the product). `migrate` syncs the Custom Field
+fixtures and re-runs registration (idempotent). Confirm all 12 Custom
+Fields exist and `QTT Product/QMP_LMS` resolves before treating this as
+live — and re-run the full `qtt_platform` security test suite (see its
+own README) against real two-tenant LMS data before this governs
+production access.
+
+**Updating an existing bench that already hit the `InvalidRemoteException`
+bug** (i.e. `qmp_lms_bridge` is cloned into `apps/` but `install-app`
+never completed):
+
+```bash
+cd apps/qmp_lms_bridge
+git pull origin main
+bench --site app.quizmasterplus.in install-app qmp_lms_bridge
+bench --site app.quizmasterplus.in migrate
+```
+
+No manual `hooks.py` edits on the server, no `sites/apps.txt` edits
+required — the fix ships in this repository (see "Why `qtt_platform` is
+not in `required_apps`" above) and takes effect the moment you pull it.
+
+## Tests
+
+- `qmp_lms_bridge/tests/test_install.py` — bench-independent, verifies
+  `check_dependencies()`'s actual logic by injecting fake `frappe` /
+  `qtt_platform` modules; runs with plain Python, no bench needed:
+  `python -m unittest qmp_lms_bridge.tests.test_install -v`. This is the
+  test that was actually run while building the fix above.
+- `qmp_lms_bridge/tests/test_install_integration.py` — a real
+  `FrappeTestCase` integration test for a live bench: `bench --site
+  <test-site> run-tests --app qmp_lms_bridge --module
+  qmp_lms_bridge.tests.test_install_integration`. Not executed during
+  development (no bench access) — run it on your own bench to confirm
+  end-to-end.

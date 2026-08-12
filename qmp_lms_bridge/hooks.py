@@ -14,7 +14,13 @@ app_description = (
 app_email = "queentouchtech@gmail.com"
 app_license = "Proprietary"
 
-required_apps = ["lms", "qtt_platform"]
+# `qtt_platform` is deliberately NOT listed here — see install.py's
+# check_dependencies() docstring and the README's "Why qtt_platform is not
+# in required_apps" section for the exact Frappe installer behavior (traced
+# against real frappe/frappe source, not guessed) that makes required_apps
+# unusable for a private app with no public git remote. `lms` stays here —
+# it resolves fine, since it's a real, publicly gettable app.
+required_apps = ["lms"]
 
 # Custom Field fixtures — the `tenant` Link field on the 12 anchor/
 # denormalized LMS doctypes. Applied by `bench migrate` directly from
@@ -22,11 +28,24 @@ required_apps = ["lms", "qtt_platform"]
 fixtures = ["Custom Field"]
 
 
+def _check_dependencies():
+	from qmp_lms_bridge.install import check_dependencies
+
+	check_dependencies()
+
+
 def _register_lms_product():
 	from qmp_lms_bridge.install import register_lms_product
 
 	register_lms_product()
 
+
+# The real "qtt_platform must already be installed" guard — runs before
+# schema sync starts, using frappe.get_installed_apps() (the site's actual
+# DB-tracked install state), not required_apps (which only trusts the
+# bench-wide sites/apps.txt file and cannot see a real install that never
+# went through `bench get-app`).
+before_install = "qmp_lms_bridge.hooks._check_dependencies"
 
 # Registers/re-registers QMP_LMS as a QTT Product on every install and
 # every migrate — idempotent (qtt_platform.product.registry.register_product
