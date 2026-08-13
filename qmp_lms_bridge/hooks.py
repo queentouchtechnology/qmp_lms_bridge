@@ -238,4 +238,16 @@ doc_events = {
 		"validate": "qmp_lms_bridge.roles.enforce_role_on_write",
 		"on_trash": "qmp_lms_bridge.roles.enforce_role_on_delete",
 	},
+	# Production-readiness audit — see native_roles.py's own module
+	# docstring for why this is needed: a QTT Product Access grant alone
+	# never touched the native Frappe Roles LMS's own DocPerm requires.
+	# QTT Product Access is a qtt_platform doctype (not one of this app's
+	# own 16), so this is the one doc_events entry in this dict that
+	# isn't LMS content — registered here anyway, never in qtt_platform
+	# itself, since which native roles a QMP_LMS product_role maps to is
+	# 100% this product's own policy.
+	"QTT Product Access": {
+		"after_insert": "qmp_lms_bridge.native_roles.sync_native_roles_on_access_change",
+		"on_update": "qmp_lms_bridge.native_roles.sync_native_roles_on_access_change",
+	},
 }
