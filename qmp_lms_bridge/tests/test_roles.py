@@ -85,9 +85,17 @@ class RoleMatrixDataTest(unittest.TestCase):
 				self.assertIn("Staff", self.roles._ROLE_MATRIX[doctype]["write"])
 				self.assertIn("Staff", self.roles._ROLE_MATRIX[doctype]["delete"])
 
-	def test_student_can_only_write_discussion_topic(self):
-		doctypes_student_can_write = [dt for dt, ops in self.roles._ROLE_MATRIX.items() if "Student" in ops["write"]]
-		self.assertEqual(doctypes_student_can_write, ["Discussion Topic"])
+	def test_student_can_write_discussion_and_self_enroll(self):
+		# Updated by the production-readiness audit: real frappe/lms
+		# DocPerm grants "LMS Student" create(+write for course-level)
+		# access to both enrollment doctypes with if_owner — self-
+		# enrollment is a genuine native LMS feature, not an over-grant.
+		doctypes_student_can_write = {
+			dt for dt, ops in self.roles._ROLE_MATRIX.items() if "Student" in ops["write"]
+		}
+		self.assertEqual(
+			doctypes_student_can_write, {"Discussion Topic", "LMS Enrollment", "LMS Batch Enrollment"}
+		)
 
 	def test_student_can_never_delete_anything(self):
 		for doctype, ops in self.roles._ROLE_MATRIX.items():
@@ -156,6 +164,18 @@ class EnforceRoleOnWriteTest(unittest.TestCase):
 		guards.require_product_role.assert_called_once_with(
 			"tenant-1", "QMP_LMS", ["Manager", "Instructor", "Staff", "Student"]
 		)
+
+	def test_student_allowed_to_self_enroll(self):
+		# Production-readiness audit fix — verified against real
+		# frappe/lms DocPerm (LMS Student: create/write, if_owner) rather
+		# than assumed.
+		roles, _, doc_sec, guards = _fresh_roles_module(tenant="tenant-1")
+
+		roles.enforce_role_on_write(mock.Mock(doctype="LMS Enrollment"))
+		guards.require_product_role.assert_called_with("tenant-1", "QMP_LMS", ["Manager", "Staff", "Student"])
+
+		roles.enforce_role_on_write(mock.Mock(doctype="LMS Batch Enrollment"))
+		guards.require_product_role.assert_called_with("tenant-1", "QMP_LMS", ["Manager", "Staff", "Student"])
 
 
 class EnforceRoleOnDeleteTest(unittest.TestCase):

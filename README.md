@@ -92,14 +92,20 @@ entirely, so trusted administrative operations (bench console, install
 scripts, a future scheduled job) are never blocked by a product-role
 check that assumes an ordinary tenant member is acting.
 
-**Known limitation, stated plainly**: Student self-enrollment (creating
-their own `LMS Enrollment`) is deliberately NOT included in the matrix
-— this project has no freshly-verified evidence this session of exactly
-how LMS's real self-enrollment flow works, and guessing a doctype shape
-for a real access-relevant action was judged worse than leaving it out
-and flagging it. If self-enrollment is a real requirement, confirm the
-actual mechanism against live LMS behavior before adding a Student
-entry for `LMS Enrollment.write`.
+**Update (production-readiness audit)**: student self-enrollment is now
+implemented — `roles.py`'s `_ROLE_MATRIX` grants `Student` write on both
+`LMS Enrollment` and `LMS Batch Enrollment`. This was resolved by reading
+the real `frappe/lms` source (`develop` branch, both doctypes' own JSON):
+`LMS Enrollment` grants the native `LMS Student` role `create=1, write=1,
+if_owner=1`; `LMS Batch Enrollment` grants `create=1, if_owner=1` (no
+edit after creation). Both doctypes' own controllers already enforce
+eligibility (`disable_self_learning`/`allow_self_enrollment`,
+`validate_owner()` forcing `owner == member`) — none of that is
+reimplemented here, this module only adds the tenant/product-role check
+on top. See `roles.py`'s own module docstring for the full reasoning,
+including why granting "write" for `Student` on Batch Enrollment is safe
+even though the real DocPerm is create-only (Frappe's native permission
+check still runs first and independently blocks the edit).
 
 ## SaaS lifecycle Phase B — plan catalog
 

@@ -35,6 +35,7 @@ def _check_dependencies():
 
 
 def _register_lms_product():
+	from qmp_lms_bridge.ai_setup import seed_ai_defaults
 	from qmp_lms_bridge.install import register_lms_product
 	from qmp_lms_bridge.plans import seed_plans
 
@@ -45,6 +46,13 @@ def _register_lms_product():
 	# for why this lives in after_install/after_migrate rather than a
 	# qtt_platform patch (SaaS lifecycle brief, Phase B).
 	seed_plans()
+	# seed_ai_defaults() (production-readiness audit) — creates the
+	# QTT AI Provider(deepseek)/QTT AI Model(quiz_generation) rows if
+	# missing, never touches them again once they exist (see ai_setup.py's
+	# own docstring for why this does NOT re-apply on every migrate the
+	# way seed_plans() does — an admin-entered API key must never be
+	# clobbered by a redeploy).
+	seed_ai_defaults()
 
 
 # The real "qtt_platform must already be installed" guard — runs before
@@ -74,6 +82,18 @@ usage_resolvers = {
 	"QMP_LMS::max_courses": "qmp_lms_bridge.usage.count_courses",
 	"QMP_LMS::max_batches": "qmp_lms_bridge.usage.count_batches",
 	"QMP_LMS::max_live_classes": "qmp_lms_bridge.usage.count_live_classes",
+	"QMP_LMS::max_quizzes": "qmp_lms_bridge.usage.count_quizzes",
+	"QMP_LMS::max_ai_credits": "qmp_lms_bridge.usage.count_ai_credits_used",
+}
+
+# --------------------------------------------------------------------------
+# AI feature handlers — production-readiness audit. Read by
+# qtt_platform.ai.feature_registry.get_ai_feature_handler(), keyed
+# "PRODUCT_KEY::feature". See qmp_lms_bridge/ai_features.py for the actual
+# handler.
+# --------------------------------------------------------------------------
+ai_feature_handlers = {
+	"QMP_LMS::quiz_generation": "qmp_lms_bridge.ai_features.generate_quiz",
 }
 
 # --------------------------------------------------------------------------

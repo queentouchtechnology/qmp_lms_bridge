@@ -62,6 +62,23 @@ PLAN_CATALOG = [
 			"max_courses": 5,
 			"max_batches": 2,
 			"max_live_classes": 2,
+			"max_quizzes": 10,
+			# ai_credits_grant (production-readiness audit): a ONE-TIME/
+			# per-billing-cycle credit grant amount, read by
+			# qtt_platform.ai.services.credit_service.grant_plan_credits()
+			# — a DIFFERENT semantic than every other feature_key above
+			# (those are running-usage LIMITS checked against a count;
+			# this is "how many credits to hand out," not compared
+			# against anything). Initial catalog value, same status as
+			# the plan prices themselves — not assumed permanent.
+			"ai_credits_grant": 20,
+			# max_ai_credits: the SAME value, but registered with a usage
+			# resolver (usage.py::count_ai_credits_used) so it shows up as
+			# a real limit/used/remaining entitlement on the dashboard —
+			# display-only, not a second enforcement path (the wallet's
+			# own atomic balance check is still what actually blocks
+			# generation; see that resolver's own docstring).
+			"max_ai_credits": 20,
 		},
 	},
 	{
@@ -75,6 +92,9 @@ PLAN_CATALOG = [
 			"max_courses": 25,
 			"max_batches": 10,
 			"max_live_classes": 10,
+			"max_quizzes": 50,
+			"ai_credits_grant": 100,
+			"max_ai_credits": 100,
 		},
 	},
 	{
@@ -88,6 +108,9 @@ PLAN_CATALOG = [
 			"max_courses": 100,
 			"max_batches": 50,
 			"max_live_classes": 50,
+			"max_quizzes": 250,
+			"ai_credits_grant": 500,
+			"max_ai_credits": 500,
 		},
 	},
 ]

@@ -50,15 +50,38 @@ the brief itself gives categories, not an operation-by-operation table):
                support task). No content-authoring, no LMS Course/Batch/
                Category administration.
   Student    — learning-only: no write access anywhere in this matrix
-               except Discussion Topic (asking/answering questions is
-               participation, not administration). Deliberately does
-               NOT include creating their own LMS Enrollment
-               (self-enrollment) — this project has no freshly-verified
-               evidence this session of exactly how/whether LMS's real
-               self-enrollment flow works, and guessing a doctype shape
-               for a real money/access-relevant action is exactly what
-               this project avoids; flagged as a known limitation, not
-               silently assumed.
+               except Discussion Topic (participation) and, as of the
+               production-readiness audit below, self-enrollment.
+
+SELF-ENROLLMENT (added after the production-readiness audit — previously
+a deliberately-flagged known limitation "no freshly-verified evidence").
+Resolved by reading the REAL frappe/lms source (github.com/frappe/lms,
+`develop` branch) rather than guessing:
+
+  - `LMS Enrollment`'s own doctype JSON grants the native "LMS Student"
+    Frappe Role `create=1, write=1, if_owner=1` — i.e. LMS's own design
+    already lets a student create AND edit their own enrollment row
+    (`if_owner`, enforced by that doctype's own `validate_owner()`,
+    which forces `self.owner = self.member`). Eligibility (course
+    published, `disable_self_learning` not set) is enforced by LMS's own
+    `LMSEnrollment.validate_course_enrollment_eligibility()` — not
+    re-implemented here.
+  - `LMS Batch Enrollment`'s own doctype JSON grants "LMS Student"
+    `create=1, if_owner=1` only — no `write=1`. LMS's own
+    `validate_self_enrollment()` gates it on the batch's own
+    `allow_self_enrollment` flag.
+
+Both are listed as `Student`-writable below. This is SAFE even though
+Batch Enrollment's real grant is create-only, not create+edit: Frappe's
+native DocPerm is checked BEFORE this module's `validate()` hook ever
+runs (see the "additional layer, never a replacement" note above) — a
+Student attempting to EDIT an existing `LMS Batch Enrollment` row is
+already rejected at the Frappe-core permission layer regardless of what
+this matrix says, so granting "write" here (which only ever tightens,
+never loosens, what Frappe's own DocPerm already allows) cannot produce
+a wider permission than LMS's own native design intends. Delete stays
+Manager+Staff only for both — LMS's own DocPerm never grants delete to
+"LMS Student" on either doctype, and this matrix doesn't either.
 
 Doctypes not listed below are outside this matrix entirely — their
 existing tenant/cross-reference guards (Phase 7/10) are unaffected
@@ -76,6 +99,7 @@ PRODUCT_KEY = "QMP_LMS"
 _MANAGER_ONLY = ("Manager",)
 _MANAGER_AND_INSTRUCTOR = ("Manager", "Instructor")
 _MANAGER_AND_STAFF = ("Manager", "Staff")
+_MANAGER_STAFF_AND_STUDENT = ("Manager", "Staff", "Student")
 _EVERYONE = ("Manager", "Instructor", "Staff", "Student")
 
 _ROLE_MATRIX = {
@@ -90,8 +114,10 @@ _ROLE_MATRIX = {
 	"LMS Live Class": {"write": _MANAGER_AND_INSTRUCTOR, "delete": _MANAGER_ONLY},
 	"LMS Assignment": {"write": _MANAGER_AND_INSTRUCTOR, "delete": _MANAGER_ONLY},
 	"LMS Certificate": {"write": _MANAGER_AND_STAFF, "delete": _MANAGER_ONLY},
-	"LMS Enrollment": {"write": _MANAGER_AND_STAFF, "delete": _MANAGER_AND_STAFF},
-	"LMS Batch Enrollment": {"write": _MANAGER_AND_STAFF, "delete": _MANAGER_AND_STAFF},
+	# Student added here per the verified self-enrollment finding above —
+	# was Manager+Staff only before the production-readiness audit.
+	"LMS Enrollment": {"write": _MANAGER_STAFF_AND_STUDENT, "delete": _MANAGER_AND_STAFF},
+	"LMS Batch Enrollment": {"write": _MANAGER_STAFF_AND_STUDENT, "delete": _MANAGER_AND_STAFF},
 	"LMS Batch Timetable": {"write": _MANAGER_AND_STAFF, "delete": _MANAGER_ONLY},
 	"LMS Timetable Legend": {"write": _MANAGER_AND_STAFF, "delete": _MANAGER_ONLY},
 	"Discussion Topic": {"write": _EVERYONE, "delete": _MANAGER_ONLY},

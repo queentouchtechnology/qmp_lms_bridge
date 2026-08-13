@@ -60,6 +60,9 @@ class PlanCatalogDataTest(unittest.TestCase):
 				"max_courses": 5,
 				"max_batches": 2,
 				"max_live_classes": 2,
+				"max_quizzes": 10,
+				"ai_credits_grant": 20,
+				"max_ai_credits": 20,
 			},
 		)
 
@@ -76,6 +79,9 @@ class PlanCatalogDataTest(unittest.TestCase):
 				"max_courses": 25,
 				"max_batches": 10,
 				"max_live_classes": 10,
+				"max_quizzes": 50,
+				"ai_credits_grant": 100,
+				"max_ai_credits": 100,
 			},
 		)
 
@@ -92,6 +98,9 @@ class PlanCatalogDataTest(unittest.TestCase):
 				"max_courses": 100,
 				"max_batches": 50,
 				"max_live_classes": 50,
+				"max_quizzes": 250,
+				"ai_credits_grant": 500,
+				"max_ai_credits": 500,
 			},
 		)
 
@@ -132,8 +141,8 @@ class SeedPlansTest(unittest.TestCase):
 		for doc in created_docs:
 			doc.insert.assert_called_once_with(ignore_permissions=True)
 			doc.save.assert_not_called()
-			# Each plan gets exactly 6 feature rows appended.
-			self.assertEqual(doc.append.call_count, 6)
+			# Each plan gets exactly 9 feature rows appended.
+			self.assertEqual(doc.append.call_count, 9)
 
 	def test_updates_existing_plans_rather_than_duplicating(self):
 		fake_frappe = _install_fake_modules(product_exists=True)
