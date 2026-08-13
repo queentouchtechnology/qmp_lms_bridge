@@ -110,18 +110,25 @@ check still runs first and independently blocks the edit).
 ## SaaS lifecycle Phase B — plan catalog
 
 `plans.py::seed_plans()` create-or-updates exactly 3 `QTT Plan` rows
-under `QMP_LMS`, each with 6 `QTT Plan Feature` child rows, on every
+under `QMP_LMS`, each with 9 `QTT Plan Feature` child rows, on every
 `after_install`/`after_migrate` — the same idempotent, re-apply-on-every-
 migrate pattern `install.py::register_lms_product()` already established
 for the product row itself:
 
-| Plan | `plan_code` | Price | `max_students` | `max_batch_students` | `max_instructors` | `max_courses` | `max_batches` | `max_live_classes` |
-|---|---|---|---|---|---|---|---|---|
-| QMP LMS Starter | `STARTER` | ₹99/mo | 25 | 25 | 2 | 5 | 2 | 2 |
-| QMP LMS Professional | `PROFESSIONAL` | ₹299/mo | 100 | 100 | 10 | 25 | 10 | 10 |
-| QMP LMS Enterprise | `ENTERPRISE` | ₹799/mo | 500 | 500 | 50 | 100 | 50 | 50 |
+| Plan | `plan_code` | Price | `max_students` | `max_batch_students` | `max_instructors` | `max_courses` | `max_batches` | `max_live_classes` | `max_quizzes` | `ai_credits_grant` | `max_ai_credits` |
+|---|---|---|---|---|---|---|---|---|---|---|---|
+| QMP LMS Starter | `STARTER` | ₹99/mo | 25 | 25 | 2 | 5 | 2 | 2 | 10 | 20 | 20 |
+| QMP LMS Professional | `PROFESSIONAL` | ₹299/mo | 100 | 100 | 10 | 25 | 10 | 10 | 50 | 100 | 100 |
+| QMP LMS Enterprise | `ENTERPRISE` | ₹799/mo | 500 | 500 | 50 | 100 | 50 | 50 | 250 | 500 | 500 |
 
 All three: `billing_period=monthly`, `trial_days=7`, `is_public=1`.
+
+`max_quizzes` (production-readiness audit) is a normal running-usage
+limit, enforced the same way as every other `max_*` key, via
+`usage.py::count_quizzes()`. `ai_credits_grant` and `max_ai_credits` are
+a different, newer pair added in the same pass — see "AI Quiz
+Generation" below for what they actually do and why two keys exist for
+what looks like the same number.
 
 **Why this lives here and not as a `qtt_platform` patch**: a Frappe
 patch (`patches/v0_*`) runs at most once per site, tracked in `Patch
@@ -452,6 +459,14 @@ row (same `name`) rather than creating a fourth one.
   registry` fake) rather than importing the real qtt_platform package,
   since it isn't on this dev environment's Python path outside a real
   bench.
+- `qmp_lms_bridge/tests/test_usage.py` — bench-independent (production-
+  readiness audit): pins `count_ai_credits_used()`'s raw SQL (SUM with a
+  sign flip — `QTT AI Credit Ledger` stores consumption as a *negative*
+  amount, this resolver flips it so "used" reads positive like every
+  other resolver), scoped by tenant/`QMP_LMS`/`consumption` only:
+  `python -m unittest qmp_lms_bridge.tests.test_usage -v` — 3/3 pass. The
+  other 7 usage resolvers are one-line `frappe.db.count()` wrappers with
+  no dedicated tests, by established precedent.
 
 **On a real bench**, additionally confirm: a user with only QMP_LMS
 `Instructor` product access, attempting to create an `LMS Course`
@@ -460,8 +475,83 @@ include `Course Creator`) → rejected with a `PermissionError` from
 `require_product_role`, even though LMS's own DocPerm would otherwise
 have allowed it; the same Instructor creating a `Course Lesson` within a
 course they have access to → succeeds; a `Student` attempting to create
-a `Discussion Topic` → succeeds; a `Student` attempting to create an
-`LMS Enrollment` (self-enrollment) → rejected, consistent with the
-documented known limitation above (there is no path that currently
-allows it, by design, pending live confirmation of the real
-self-enrollment mechanism).
+a `Discussion Topic` → succeeds; a `Student` self-enrolling (creating an
+`LMS Enrollment` or `LMS Batch Enrollment` with themselves as owner) →
+succeeds, per the resolved self-enrollment fix below — no longer a known
+limitation.
+
+### Self-enrollment — resolved (production-readiness audit)
+
+Previously documented as a known limitation ("no path currently allows
+it, by design, pending live confirmation of the real self-enrollment
+mechanism"). Resolved by actually fetching and reading the real LMS
+source (`https://raw.githubusercontent.com/frappe/lms/develop/...`) —
+not guessed: `LMS Enrollment`'s own DocPerm grants the native `LMS
+Student` Frappe Role `create=1, write=1, if_owner=1`; `LMS Batch
+Enrollment` grants `create=1, if_owner=1`. Both doctypes' own
+controllers (`LMSEnrollment.validate_course_enrollment_eligibility()`,
+`LMSBatchEnrollment.validate_self_enrollment()`) already enforce
+eligibility (`disable_self_learning`, `allow_self_enrollment`) and force
+`self.owner = self.member`, so this is a real, intended native LMS
+feature, not an over-grant risk — Frappe's native DocPerm is checked
+*before* this app's `roles.py::enforce_role_on_write` hook ever runs, so
+adding `Student` to `_ROLE_MATRIX["LMS Enrollment"]["write"]` /
+`["LMS Batch Enrollment"]["write"]` can only ever narrow what LMS's own
+DocPerm already permits, never widen it. `roles.py` and
+`tests/test_roles.py` updated accordingly — 16/16 tests pass.
+
+## AI Quiz Generation (production-readiness audit)
+
+Before this pass, `qtt_platform`'s entire AI gateway/credit-wallet stack
+had zero real feature using it anywhere in the system. This app is the
+first (and so far only) caller.
+
+- **`ai_features.py::generate_quiz(*, tenant, user, inputs)`** — the
+  registered handler for `qtt_platform.api.ai.generate("QMP_LMS",
+  "quiz_generation", ...)`. Manager/Instructor only
+  (`require_product_role`). Validates `topic`/`difficulty`/
+  `question_type` (`Choices` | `User Input` | `Open Ended` — the only
+  values live-verified against the real `LMS Question` doctype)/
+  `num_questions` (capped 1–20), builds an `AiRequest`, calls
+  `qtt_platform.ai.service.generate_and_track()` (reserve credits → call
+  gateway → refund on provider failure → record usage — pre-existing,
+  unmodified, just given its first real caller), then parses the
+  model's JSON response into `{"questions": [...]}`. A malformed model
+  response raises `ValidationError` and does **not** refund the credit —
+  the provider call itself succeeded, only the parse failed, so the
+  spend is real. Credit cost: `QUIZ_GENERATION_CREDIT_COST = 5.0` per
+  call (a constant, not yet configurable per-plan).
+- **`ai_setup.py::seed_ai_defaults()`** — called from
+  `hooks.py::_register_lms_product()` on every install/migrate, but
+  (unlike `seed_plans()`) only *creates* the `QTT AI Provider(deepseek)`
+  / `QTT AI Model(quiz_generation → deepseek-v4-flash)` rows if they
+  don't already exist; never touches them again once created. This is
+  deliberate: an admin-entered `api_key` must never be silently
+  clobbered by a redeploy. **The provider row is created with `api_key`
+  left blank on purpose** — a real DeepSeek API key must be entered
+  exclusively through the Desk UI's `QTT AI Provider` → `deepseek` row →
+  `API Key` field (a Password fieldtype, the one mechanism that encrypts
+  it with the site's own encryption key). **Never put a real API key in
+  any file in this repo, a fixture, a seed script, or a commit** — same
+  rule this project has applied to every credential (Razorpay keys
+  included) since Phase C.
+- Model ID `deepseek-v4-flash` was confirmed live via two independent
+  fetches of DeepSeek's own current docs
+  (`api-docs.deepseek.com/quick_start/pricing` and
+  `api-docs.deepseek.com/`) — superseding the older `deepseek-chat`/
+  `deepseek-reasoner` naming that would otherwise have been assumed from
+  training data.
+- **`hooks.py`** registers `ai_feature_handlers = {"QMP_LMS::quiz_generation":
+  "qmp_lms_bridge.ai_features.generate_quiz"}` and adds
+  `"QMP_LMS::max_quizzes"` / `"QMP_LMS::max_ai_credits"` to
+  `usage_resolvers`.
+
+**Not done in this pass, real gaps**: no real DeepSeek API call was ever
+made (no key, no bench) — only the routing/provider plumbing was
+exercised via mocks. No Flutter UI calls `api.ai.generate` yet (P1, not
+started). Before this governs real usage: enter a real DeepSeek key via
+the Desk UI as described above, then run one real
+`api.ai.generate("QMP_LMS", "quiz_generation", {"topic": "...",
+"difficulty": "medium", "question_type": "Choices", "num_questions": 5})`
+call end to end and confirm both the returned questions and the wallet
+balance decrease by `QUIZ_GENERATION_CREDIT_COST`.
