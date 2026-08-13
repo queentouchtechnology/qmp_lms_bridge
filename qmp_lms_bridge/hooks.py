@@ -125,11 +125,33 @@ tenant_dynamic_parent_links = {
 # docstring for why permission_query_conditions, unlike has_permission,
 # does need one function per doctype).
 # --------------------------------------------------------------------------
+#: Production-readiness audit: the 12 doctypes with a direct `tenant`
+#: Custom Field had NEITHER has_permission NOR permission_query_conditions
+#: registered at all until live cross-tenant testing caught it — see
+#: permissions.py's own module docstring for the full story and the real
+#: production data that confirmed the leak (ABC School reading XYZ
+#: College's course/quiz, both by list and by direct name).
+_DIRECT_TENANT_FIELD_DOCTYPES = (
+	"LMS Course",
+	"LMS Batch",
+	"LMS Zoom Settings",
+	"Course Evaluator",
+	"LMS Category",
+	"Course Lesson",
+	"LMS Quiz",
+	"LMS Enrollment",
+	"LMS Batch Enrollment",
+	"LMS Certificate",
+	"LMS Live Class",
+	"LMS Assignment",
+)
+
 has_permission = {
 	"Course Chapter": "qtt_platform.permissions.handlers.has_permission",
 	"LMS Batch Timetable": "qtt_platform.permissions.handlers.has_permission",
 	"LMS Timetable Legend": "qtt_platform.permissions.handlers.has_permission",
 	"Discussion Topic": "qtt_platform.permissions.handlers.has_permission",
+	**{dt: "qtt_platform.permissions.handlers.has_permission" for dt in _DIRECT_TENANT_FIELD_DOCTYPES},
 }
 
 permission_query_conditions = {
@@ -137,6 +159,18 @@ permission_query_conditions = {
 	"LMS Batch Timetable": "qmp_lms_bridge.permissions.lms_batch_timetable_query_conditions",
 	"LMS Timetable Legend": "qmp_lms_bridge.permissions.lms_timetable_legend_query_conditions",
 	"Discussion Topic": "qmp_lms_bridge.permissions.discussion_topic_query_conditions",
+	"LMS Course": "qmp_lms_bridge.permissions.lms_course_query_conditions",
+	"LMS Batch": "qmp_lms_bridge.permissions.lms_batch_query_conditions",
+	"LMS Zoom Settings": "qmp_lms_bridge.permissions.lms_zoom_settings_query_conditions",
+	"Course Evaluator": "qmp_lms_bridge.permissions.course_evaluator_query_conditions",
+	"LMS Category": "qmp_lms_bridge.permissions.lms_category_query_conditions",
+	"Course Lesson": "qmp_lms_bridge.permissions.course_lesson_query_conditions",
+	"LMS Quiz": "qmp_lms_bridge.permissions.lms_quiz_query_conditions",
+	"LMS Enrollment": "qmp_lms_bridge.permissions.lms_enrollment_query_conditions",
+	"LMS Batch Enrollment": "qmp_lms_bridge.permissions.lms_batch_enrollment_query_conditions",
+	"LMS Certificate": "qmp_lms_bridge.permissions.lms_certificate_query_conditions",
+	"LMS Live Class": "qmp_lms_bridge.permissions.lms_live_class_query_conditions",
+	"LMS Assignment": "qmp_lms_bridge.permissions.lms_assignment_query_conditions",
 }
 
 # --------------------------------------------------------------------------

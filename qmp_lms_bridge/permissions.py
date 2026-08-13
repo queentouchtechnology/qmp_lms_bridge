@@ -1,16 +1,32 @@
 """
-permission_query_conditions for the 4 hook-only LMS doctypes — the piece
-the hardening review section 2/17 said couldn't be built generically
-(a raw SQL WHERE-clause fragment necessarily names real tables/columns).
-Now that real doctypes exist, here they are.
+permission_query_conditions for every tenant-scoped LMS doctype this app
+registers. Two shapes:
 
-has_permission for these same 4 doctypes does NOT need a per-doctype
-function here — qtt_platform.permissions.handlers.has_permission is fully
-generic once qtt_platform.document_security.resolve_tenant_for_doc can
-resolve the doctype (which it now can, via the tenant_parent_links /
-tenant_dynamic_parent_links registries this app populates in hooks.py).
-Register that same function directly against all 4 doctypes in hooks.py's
-has_permission dict — see that file.
+- The 4 hook-only doctypes (Course Chapter, LMS Batch Timetable,
+  LMS Timetable Legend, Discussion Topic) — no direct `tenant` field,
+  resolved via a parent-link join, one function each (unavoidable — a
+  raw SQL WHERE-clause fragment necessarily names the real join path,
+  which differs per doctype).
+- The 12 doctypes WITH a direct `tenant` Custom Field (LMS Course,
+  LMS Batch, LMS Zoom Settings, Course Evaluator, LMS Category,
+  Course Lesson, LMS Quiz, LMS Enrollment, LMS Batch Enrollment,
+  LMS Certificate, LMS Live Class, LMS Assignment) — genuinely generic
+  (same `tenant` column name on every one), added in the
+  production-readiness audit after live testing found these 12 had NO
+  permission_query_conditions AND no has_permission registered at all:
+  a real Tenant Owner could list AND directly open another tenant's
+  LMS Course/LMS Quiz by name, confirmed against real production data
+  (ABC School reading XYZ College's course/quiz). Only the 4 hook-only
+  doctypes had ever been wired up; the other 12 relied solely on native
+  Frappe DocPerm (Moderator/Course Creator/etc.), which has no concept
+  of tenant at all.
+
+has_permission for ALL 16 doctypes (both shapes) uses the exact same
+generic qtt_platform.permissions.handlers.has_permission — it already
+resolves tenant via document_security.resolve_tenant_for_doc(), which
+tries a direct `tenant` field FIRST before falling back to the
+parent-link registries, so no per-doctype has_permission function is
+ever needed here. See hooks.py's has_permission dict.
 """
 
 import frappe
@@ -71,3 +87,65 @@ def lms_timetable_legend_query_conditions(user=None):
 	return _polymorphic_query_conditions(
 		"LMS Timetable Legend", "reference_doctype", "reference_docname", user=user
 	)
+
+
+# ---------------------------------------------------------------------------
+# The 12 doctypes with a direct `tenant` Custom Field — see this module's
+# own docstring for why these were missing entirely until the
+# production-readiness audit caught it via live cross-tenant testing.
+# ---------------------------------------------------------------------------
+
+
+def _direct_tenant_query_conditions(doctype: str, user=None) -> str:
+	tenant = resolve_active_tenant(user=user)
+	if not tenant:
+		return "1=0"
+	return f"`tab{doctype}`.tenant = {frappe.db.escape(tenant)}"
+
+
+def lms_course_query_conditions(user=None):
+	return _direct_tenant_query_conditions("LMS Course", user=user)
+
+
+def lms_batch_query_conditions(user=None):
+	return _direct_tenant_query_conditions("LMS Batch", user=user)
+
+
+def lms_zoom_settings_query_conditions(user=None):
+	return _direct_tenant_query_conditions("LMS Zoom Settings", user=user)
+
+
+def course_evaluator_query_conditions(user=None):
+	return _direct_tenant_query_conditions("Course Evaluator", user=user)
+
+
+def lms_category_query_conditions(user=None):
+	return _direct_tenant_query_conditions("LMS Category", user=user)
+
+
+def course_lesson_query_conditions(user=None):
+	return _direct_tenant_query_conditions("Course Lesson", user=user)
+
+
+def lms_quiz_query_conditions(user=None):
+	return _direct_tenant_query_conditions("LMS Quiz", user=user)
+
+
+def lms_enrollment_query_conditions(user=None):
+	return _direct_tenant_query_conditions("LMS Enrollment", user=user)
+
+
+def lms_batch_enrollment_query_conditions(user=None):
+	return _direct_tenant_query_conditions("LMS Batch Enrollment", user=user)
+
+
+def lms_certificate_query_conditions(user=None):
+	return _direct_tenant_query_conditions("LMS Certificate", user=user)
+
+
+def lms_live_class_query_conditions(user=None):
+	return _direct_tenant_query_conditions("LMS Live Class", user=user)
+
+
+def lms_assignment_query_conditions(user=None):
+	return _direct_tenant_query_conditions("LMS Assignment", user=user)
