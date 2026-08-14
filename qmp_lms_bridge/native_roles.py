@@ -80,5 +80,17 @@ def sync_native_roles_on_access_change(doc, method=None):
 	if not missing:
 		return
 
+	# NOT User.add_roles() — it calls self.save() with no
+	# ignore_permissions, so it 403s under any caller who lacks native
+	# write access to User, which is every real Guest signup (this
+	# function runs from an after_insert hook fired mid-signup, before
+	# the new user is ever authenticated as anyone). Found live: a real,
+	# unauthenticated signup() call failed outright because of this.
+	# Appending the role rows directly and saving with
+	# ignore_permissions=True is the correct bypass — this grant is a
+	# system-level side effect of a QTT Product Access change, not
+	# something the calling user's own permissions should gate.
 	user_doc = frappe.get_doc("User", user)
-	user_doc.add_roles(*missing)
+	for role in missing:
+		user_doc.append("roles", {"role": role})
+	user_doc.save(ignore_permissions=True)
