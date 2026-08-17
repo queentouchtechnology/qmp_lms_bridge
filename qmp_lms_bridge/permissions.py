@@ -31,7 +31,17 @@ ever needed here. See hooks.py's has_permission dict.
 
 import frappe
 
+from qtt_platform.product.guards import require_product_access
 from qtt_platform.tenant.context import resolve_active_tenant
+
+#: LMS Quiz Submission-specific — see this module's own functions for it,
+#: below the 12-doctype block. Not one of the 12: unlike those, a Student
+#: caller here must be additionally restricted to their OWN rows
+#: (`member == user`), not just tenant-matched — the generic
+#: qtt_platform.permissions.handlers.has_permission the other 12 share
+#: has no concept of per-row ownership, so this doctype gets its own
+#: has_permission, not just its own query_conditions.
+_QMP_LMS_PRODUCT_KEY = "QMP_LMS"
 
 #: The two reference types Discussion Topic / LMS Timetable Legend
 #: actually point at in this product. If a third ever appears (unlikely —
@@ -149,3 +159,58 @@ def lms_live_class_query_conditions(user=None):
 
 def lms_assignment_query_conditions(user=None):
 	return _direct_tenant_query_conditions("LMS Assignment", user=user)
+
+
+# ---------------------------------------------------------------------------
+# LMS Quiz Submission — tenant field added alongside quiz_grading.py's new
+# server-side grading endpoint (Quiz Integrity pass). Found via the same
+# live DocPerm check this project uses throughout: LMS Student holds
+# read=1 with if_owner=0 on this doctype natively — any student, in any
+# tenant, could read every other student's quiz submission and result
+# rows. Tenant-scoping alone (the 12-doctype pattern above) would still
+# leave every student within a tenant able to read every other student's
+# results, so this doctype needs the extra ownership check below.
+# ---------------------------------------------------------------------------
+
+
+def lms_quiz_submission_query_conditions(user=None):
+	tenant = resolve_active_tenant(user=user)
+	if not tenant:
+		return "1=0"
+	tenant_clause = f"`tabLMS Quiz Submission`.tenant = {frappe.db.escape(tenant)}"
+
+	try:
+		access = require_product_access(tenant, _QMP_LMS_PRODUCT_KEY, user=user)
+	except frappe.PermissionError:
+		return "1=0"
+
+	if access.product_role == "Student":
+		user_escaped = frappe.db.escape(user or frappe.session.user)
+		return f"({tenant_clause} and `tabLMS Quiz Submission`.member = {user_escaped})"
+	# Manager/Instructor/Staff need to see every student's results within
+	# their own tenant for grading/reporting — tenant match alone suffices.
+	return tenant_clause
+
+
+def lms_quiz_submission_has_permission(doc, user=None, permission_type=None):
+	"""Doctype-specific has_permission — see this section's own header
+	comment for why the shared qtt_platform generic handler (tenant-match
+	only) isn't enough here. Never raises, per the has_permission hook
+	contract."""
+	user = user or frappe.session.user
+	tenant = resolve_active_tenant(user=user)
+	if not tenant:
+		return False
+
+	doc_tenant = doc.get("tenant") if doc.is_new() else frappe.db.get_value(doc.doctype, doc.name, "tenant")
+	if doc_tenant != tenant:
+		return False
+
+	try:
+		access = require_product_access(tenant, _QMP_LMS_PRODUCT_KEY, user=user)
+	except frappe.PermissionError:
+		return False
+
+	if access.product_role == "Student":
+		return doc.get("member") == user
+	return True

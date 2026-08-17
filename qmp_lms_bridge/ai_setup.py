@@ -28,7 +28,18 @@ off, or blank out a key that's already been entered through the Desk.
 import frappe
 
 PROVIDER_KEY = "deepseek"
+
+#: `QTT AI Model` has a unique constraint on (provider, model_id) — only
+#: one row can ever exist per model, and `default_for_task` lives on that
+#: same row, so one model can only be the ROUTING default for one task.
+#: A second AI feature that wants to reuse this exact model (rather than
+#: register and pay for a distinct one) does so by passing this model_id
+#: explicitly on its own AiRequest (see ai_features.py's reword_question),
+#: which bypasses routing.py's default_for_task lookup entirely — not by
+#: registering a second QTT AI Model row for the same model_id, which the
+#: unique constraint rejects (confirmed live 2026-08-15).
 TASK = "quiz_generation"
+MODEL_ID = "deepseek-v4-flash"
 
 
 def seed_ai_defaults() -> None:
@@ -71,7 +82,7 @@ def _ensure_model() -> None:
 			# for a per-generation-costed feature like quiz generation;
 			# swap to "deepseek-v4-pro" via the Desk if higher quality is
 			# worth the extra cost for this task.
-			"model_id": "deepseek-v4-flash",
+			"model_id": MODEL_ID,
 			"default_for_task": TASK,
 			"cost_input_per_1m": 0,
 			"cost_output_per_1m": 0,

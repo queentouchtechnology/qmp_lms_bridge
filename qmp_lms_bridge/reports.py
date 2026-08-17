@@ -72,14 +72,21 @@ def _course_engagement_report(tenant: str, date_from: str | None, date_to: str |
 
 
 def _quiz_performance_report(tenant: str, date_from: str | None, date_to: str | None) -> dict:
+	# `tenant` (Custom Field added alongside quiz_grading.py's grading
+	# endpoint — this doctype had none before, so this query previously
+	# referenced a column that didn't exist and would have thrown a real
+	# SQL error on every call). Pass/fail is derived from
+	# percentage/passing_percentage — `LMS Quiz Submission` has no Pass/
+	# Fail string field; `result` is the per-question child table, not a
+	# scalar column, so comparing it to a string would also have failed.
 	date_clause, date_params = _date_filter("creation", date_from, date_to)
 	rows = frappe.db.sql(
 		f"""
 		SELECT quiz, quiz_title,
 			COUNT(*) AS submission_count,
 			AVG(percentage) AS avg_percentage,
-			SUM(CASE WHEN result = 'Pass' THEN 1 ELSE 0 END) AS pass_count,
-			SUM(CASE WHEN result = 'Fail' THEN 1 ELSE 0 END) AS fail_count
+			SUM(CASE WHEN percentage >= passing_percentage THEN 1 ELSE 0 END) AS pass_count,
+			SUM(CASE WHEN percentage < passing_percentage THEN 1 ELSE 0 END) AS fail_count
 		FROM `tabLMS Quiz Submission`
 		WHERE tenant = %s {date_clause}
 		GROUP BY quiz, quiz_title

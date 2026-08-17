@@ -70,6 +70,15 @@ before_install = "qmp_lms_bridge.hooks._check_dependencies"
 after_install = "qmp_lms_bridge.hooks._register_lms_product"
 after_migrate = "qmp_lms_bridge.hooks._register_lms_product"
 
+# Vendor `lms` runtime patches (see vendor_patches.py) are applied at
+# `qmp_lms_bridge/__init__.py` import time, not via a hook — `boot_session`
+# was tried first but only fires when building desk bootinfo
+# (`frappe/boot.py:get_bootinfo`), which this app's REST-only mobile
+# client never triggers. Module import happens for every worker process
+# regardless of request shape (this app's own `hooks.py` is imported to
+# resolve `get_hooks()`, which pulls in `__init__.py` first), so that's
+# the reliable place instead.
+
 # --------------------------------------------------------------------------
 # Usage resolvers — read by qtt_platform.usage.registry.get_usage(), keyed
 # "PRODUCT_KEY::feature_key". See qmp_lms_bridge/usage.py for the actual
@@ -94,6 +103,10 @@ usage_resolvers = {
 # --------------------------------------------------------------------------
 ai_feature_handlers = {
 	"QMP_LMS::quiz_generation": "qmp_lms_bridge.ai_features.generate_quiz",
+	"QMP_LMS::question_rewording": "qmp_lms_bridge.ai_features.reword_question",
+	"QMP_LMS::course_content": "qmp_lms_bridge.ai_features.generate_course_content",
+	"QMP_LMS::lesson_content": "qmp_lms_bridge.ai_features.generate_lesson_content",
+	"QMP_LMS::assignment_content": "qmp_lms_bridge.ai_features.generate_assignment_content",
 }
 
 # --------------------------------------------------------------------------
@@ -152,6 +165,10 @@ has_permission = {
 	"LMS Timetable Legend": "qtt_platform.permissions.handlers.has_permission",
 	"Discussion Topic": "qtt_platform.permissions.handlers.has_permission",
 	**{dt: "qtt_platform.permissions.handlers.has_permission" for dt in _DIRECT_TENANT_FIELD_DOCTYPES},
+	# Doctype-specific, not the shared generic handler — see
+	# permissions.py's own comment on why LMS Quiz Submission needs
+	# per-row ownership checking, not just tenant-matching.
+	"LMS Quiz Submission": "qmp_lms_bridge.permissions.lms_quiz_submission_has_permission",
 }
 
 permission_query_conditions = {
@@ -171,6 +188,7 @@ permission_query_conditions = {
 	"LMS Certificate": "qmp_lms_bridge.permissions.lms_certificate_query_conditions",
 	"LMS Live Class": "qmp_lms_bridge.permissions.lms_live_class_query_conditions",
 	"LMS Assignment": "qmp_lms_bridge.permissions.lms_assignment_query_conditions",
+	"LMS Quiz Submission": "qmp_lms_bridge.permissions.lms_quiz_submission_query_conditions",
 }
 
 # --------------------------------------------------------------------------
